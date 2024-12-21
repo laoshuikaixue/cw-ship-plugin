@@ -11,6 +11,7 @@ WIDGET_WIDTH = 360
 API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=5"
 CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
+
 class Plugin:
     def __init__(self, cw_contexts, method):
         self.cw_contexts = cw_contexts
@@ -120,7 +121,8 @@ class Plugin:
         scroll_area.setWidget(scroll_content)
         return scroll_area
 
-    def create_description_label(self, description):
+    @staticmethod
+    def create_description_label(description):
         """创建一个描述标签并返回"""
         description_label = QLabel(description)
         description_label.setAlignment(Qt.AlignLeft)

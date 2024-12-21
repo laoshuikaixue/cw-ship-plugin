@@ -14,7 +14,7 @@ CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 class Plugin:
     def __init__(self, cw_contexts, method):
-        if time.localtime().tm_wday != 5:
+        if not self.is_saturday():
             logger.info("今天不是周六，插件不进行初始化。")
             return
         self.cw_contexts = cw_contexts
@@ -39,7 +39,6 @@ class Plugin:
         self.scroll_timer = QTimer()
         self.scroll_timer.timeout.connect(self.auto_scroll)
         self.scroll_timer.start(50)  # 每50毫秒执行一次滚动
-
 
     @staticmethod
     def fetch_ship_dynamics():
@@ -149,6 +148,11 @@ class Plugin:
             if child_widget:
                 child_widget.deleteLater()
 
+    @staticmethod
+    def is_saturday():
+        """判断今天是否是周六"""
+        return time.localtime().tm_wday == 5
+
     def auto_scroll(self):
         """自动滚动功能"""
         scroll_area = self.test_widget.findChild(QScrollArea)
@@ -175,7 +179,7 @@ class Plugin:
         return []
 
     def execute(self):
-        if time.localtime().tm_wday != 5:
+        if not self.is_saturday():
             logger.info("今天不是周六，插件不进行初始化。")
             return
         """首次执行，加载船班信息"""

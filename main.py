@@ -8,8 +8,7 @@ WIDGET_CODE = 'widget_test.ui'
 WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
 API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=5"
-CACHE_DURATION = 300  # 缓存更新周期：5分钟
-
+CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 class Plugin:
     def __init__(self, cw_contexts, method):
@@ -21,7 +20,7 @@ class Plugin:
 
         self.method.register_widget(WIDGET_CODE, WIDGET_NAME, WIDGET_WIDTH)
 
-        # 定时器：每5分钟请求一次船班信息
+        # 定时器：每30分钟请求一次船班信息
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_ship_dynamics)
         self.timer.start(CACHE_DURATION * 1000)  # 设置定时器的间隔（毫秒）
@@ -43,7 +42,7 @@ class Plugin:
     def fetch_ship_dynamics():
         """请求船班信息接口并获取数据"""
         try:
-            response = requests.get(API_URL)
+            response = requests.get(API_URL, proxies={'http': None, 'https': None})  # 禁用代理
             response.raise_for_status()  # 如果状态码不是200，则抛出异常
             data = response.json().get("data", [])
             return [item.get("description") for item in data]
@@ -55,7 +54,7 @@ class Plugin:
         """更新船班信息"""
         if self.should_update_cache():
             # 判断是否需要更新缓存
-            descriptions = self.fetch_ship_dynamics()
+            descriptions = self.retry_fetch()
             if descriptions:
                 self.cached_descriptions = descriptions
                 self.last_fetched = time.time()
@@ -144,11 +143,17 @@ class Plugin:
                     self.scroll_position += 1
                     vertical_scrollbar.setValue(self.scroll_position)
 
+    def retry_fetch(self):
+        """请求失败后重试获取数据"""
+        retries = 3
+        for attempt in range(retries):
+            descriptions = self.fetch_ship_dynamics()
+            if descriptions:
+                return descriptions
+            logger.warning(f"获取船班信息失败，正在重试 ({attempt + 1}/{retries})...")
+            time.sleep(1)  # 重试间隔1秒
+        return []
+
     def execute(self):
         """首次执行，加载船班信息"""
         self.update_ship_dynamics()
-
-    def update(self, cw_contexts):
-        """每秒执行的更新方法"""
-        self.cw_contexts = cw_contexts
-        logger.debug("更新方法执行。执行轻量级操作。")

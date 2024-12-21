@@ -14,6 +14,9 @@ CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 class Plugin:
     def __init__(self, cw_contexts, method):
+        if time.localtime().tm_wday != 5:
+            logger.info("今天不是周六，插件不进行初始化。")
+            return
         self.cw_contexts = cw_contexts
         self.method = method
 
@@ -37,8 +40,6 @@ class Plugin:
         self.scroll_timer.timeout.connect(self.auto_scroll)
         self.scroll_timer.start(50)  # 每50毫秒执行一次滚动
 
-        # 初始数据加载
-        self.execute()
 
     @staticmethod
     def fetch_ship_dynamics():
@@ -174,5 +175,8 @@ class Plugin:
         return []
 
     def execute(self):
+        if time.localtime().tm_wday != 5:
+            logger.info("今天不是周六，插件不进行初始化。")
+            return
         """首次执行，加载船班信息"""
         self.update_ship_dynamics()

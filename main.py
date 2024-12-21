@@ -3,6 +3,7 @@ import requests
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayout
 from loguru import logger
+from qfluentwidgets import isDarkTheme
 
 WIDGET_CODE = 'widget_test.ui'
 WIDGET_NAME = '船班信息 | LaoShui'
@@ -100,6 +101,7 @@ class Plugin:
         """创建并返回一个包含船班描述信息的滚动区域"""
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("QScrollBar:vertical { width: 0px; }")  # 隐藏滚动条
 
         scroll_content = QWidget()
         scroll_content_layout = QVBoxLayout()
@@ -109,16 +111,31 @@ class Plugin:
             description_label = self.create_description_label(description)
             scroll_content_layout.addWidget(description_label)
 
+            # 添加分割线
+            line = QLabel()
+            line.setFixedHeight(1)
+            line.setStyleSheet("background-color: #E0E0E0;" if not isDarkTheme() else "background-color: #3A3A3A;")
+            scroll_content_layout.addWidget(line)
+
         scroll_area.setWidget(scroll_content)
         return scroll_area
 
-    @staticmethod
-    def create_description_label(description):
+    def create_description_label(self, description):
         """创建一个描述标签并返回"""
         description_label = QLabel(description)
         description_label.setAlignment(Qt.AlignLeft)
         description_label.setWordWrap(True)  # 自动换行
-        description_label.setStyleSheet("font-size: 14px; color: #FAF9F6;")
+
+        # 根据主题设置样式
+        if isDarkTheme():
+            description_label.setStyleSheet(
+                "font-size: 14px; color: #FAF9F6;"
+            )
+        else:
+            description_label.setStyleSheet(
+                "font-size: 14px; color: #2E2E2E;"
+            )
+
         return description_label
 
     @staticmethod

@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayo
 from loguru import logger
 from qfluentwidgets import isDarkTheme
 
-WIDGET_CODE = 'widget_test.ui'
+WIDGET_CODE = 'widget_ship.ui'
 WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
 API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=5"

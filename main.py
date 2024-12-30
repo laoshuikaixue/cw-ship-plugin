@@ -14,9 +14,9 @@ CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 class Plugin:
     def __init__(self, cw_contexts, method):
-        if not self.is_saturday():
-            logger.info("今天不是周六，插件不进行初始化。")
-            return
+        # if not self.is_saturday():
+        #     logger.info("今天不是周六，插件不进行初始化。")
+        #     return
         self.cw_contexts = cw_contexts
         self.method = method
 
@@ -131,11 +131,11 @@ class Plugin:
         # 根据主题设置样式
         if isDarkTheme():
             description_label.setStyleSheet(
-                "font-size: 14px; color: #FAF9F6;"
+                "font-size: 14px; color: #FAF9F6; font-weight: bold;"
             )
         else:
             description_label.setStyleSheet(
-                "font-size: 14px; color: #2E2E2E;"
+                "font-size: 14px; color: #2E2E2E; font-weight: bold;"
             )
 
         return description_label
@@ -155,6 +155,8 @@ class Plugin:
 
     def auto_scroll(self):
         """自动滚动功能"""
+        if self.test_widget is None:  # 如果小组件不存在，则不执行
+            return
         scroll_area = self.test_widget.findChild(QScrollArea)
         if scroll_area:
             vertical_scrollbar = scroll_area.verticalScrollBar()
@@ -179,8 +181,8 @@ class Plugin:
         return []
 
     def execute(self):
-        if not self.is_saturday():
-            logger.info("今天不是周六，插件不进行初始化。")
-            return
+        # if not self.is_saturday():
+        #     logger.info("今天不是周六，插件不进行初始化。")
+        #     return
         """首次执行，加载船班信息"""
         self.update_ship_dynamics()

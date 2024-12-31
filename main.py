@@ -1,7 +1,7 @@
 import time
 import requests
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayout
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal
+from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayout, QScrollBar
 from loguru import logger
 from qfluentwidgets import isDarkTheme
 
@@ -10,6 +10,49 @@ WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
 API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=5"
 CACHE_DURATION = 1800  # 缓存更新周期：30分钟
+
+
+class SmoothScrollBar(QScrollBar):
+    """平滑滚动条"""
+    scrollFinished = pyqtSignal()
+
+    def __init__(self, parent=None):
+        QScrollBar.__init__(self, parent)
+        self.ani = QPropertyAnimation()
+        self.ani.setTargetObject(self)
+        self.ani.setPropertyName(b"value")
+        self.ani.setEasingCurve(QEasingCurve.OutCubic)
+        self.ani.setDuration(400)  # 调整动画持续时间
+        self.__value = self.value()
+        self.ani.finished.connect(self.scrollFinished)
+
+    def setValue(self, value: int):
+        if value == self.value():
+            return
+
+        self.ani.stop()
+        self.scrollFinished.emit()
+
+        self.ani.setStartValue(self.value())
+        self.ani.setEndValue(value)
+        self.ani.start()
+
+    def wheelEvent(self, e):
+        # 阻止默认的滚轮事件，使用自定义的滚动逻辑
+        e.ignore()
+
+
+class SmoothScrollArea(QScrollArea):
+    """平滑滚动区域"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.vScrollBar = SmoothScrollBar()
+        self.setVerticalScrollBar(self.vScrollBar)
+        self.setStyleSheet("QScrollBar:vertical { width: 0px; }")  # 隐藏原始滚动条
+
+    def wheelEvent(self, e):
+        self.vScrollBar.scrollValue(-e.angleDelta().y())
 
 
 class Plugin:
@@ -100,7 +143,7 @@ class Plugin:
 
     def create_scroll_area(self, descriptions):
         """创建并返回一个包含船班描述信息的滚动区域"""
-        scroll_area = QScrollArea()
+        scroll_area = SmoothScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet("QScrollBar:vertical { width: 0px; }")  # 隐藏滚动条
 
@@ -157,17 +200,20 @@ class Plugin:
         """自动滚动功能"""
         if self.test_widget is None:  # 如果小组件不存在，则不执行
             return
-        scroll_area = self.test_widget.findChild(QScrollArea)
+
+        scroll_area = self.test_widget.findChild(SmoothScrollArea)
         if scroll_area:
             vertical_scrollbar = scroll_area.verticalScrollBar()
             if vertical_scrollbar:
                 max_value = vertical_scrollbar.maximum()
+                # 如果滚动条已经到达底部，滚动回顶部
                 if self.scroll_position >= max_value:
-                    vertical_scrollbar.setValue(0)  # 滚动到顶部
                     self.scroll_position = 0
                 else:
+                    # 否则继续向下滚动
                     self.scroll_position += 1
-                    vertical_scrollbar.setValue(self.scroll_position)
+
+                vertical_scrollbar.setValue(self.scroll_position)
 
     def retry_fetch(self):
         """请求失败后重试获取数据"""

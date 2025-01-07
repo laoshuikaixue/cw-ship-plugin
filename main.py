@@ -8,7 +8,7 @@ from qfluentwidgets import isDarkTheme
 WIDGET_CODE = 'widget_ship.ui'
 WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
-API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=5"
+API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=4"
 CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 
@@ -121,20 +121,28 @@ class Plugin:
     def update_widget_content(self, descriptions):
         """更新小组件内容"""
         self.test_widget = self.method.get_widget(WIDGET_CODE)
-        if self.test_widget:
-            content_layout = self.find_child_layout(self.test_widget, 'contentLayout')
-            content_layout.setSpacing(5)
+        if not self.test_widget:  # 如果test_widget为空
+            logger.error(f"小组件未找到，WIDGET_CODE: {WIDGET_CODE}")
+            return
 
-            # 修改标题
-            self.method.change_widget_content(WIDGET_CODE, WIDGET_NAME, WIDGET_NAME)
-            # 清除旧内容
-            self.clear_existing_content(content_layout)
+        content_layout = self.find_child_layout(self.test_widget, 'contentLayout')
+        if not content_layout:
+            logger.error("未能找到小组件的'contentLayout'布局")
+            return
 
-            # 创建滚动区域并设置内容
-            scroll_area = self.create_scroll_area(descriptions)
+        content_layout.setSpacing(5)
+        self.method.change_widget_content(WIDGET_CODE, WIDGET_NAME, WIDGET_NAME)
+
+        # 清除旧内容
+        self.clear_existing_content(content_layout)
+
+        # 创建滚动区域并设置内容
+        scroll_area = self.create_scroll_area(descriptions)
+        if scroll_area:
             content_layout.addWidget(scroll_area)
-
-        logger.success('船班信息更新成功！')
+            logger.success('船班信息更新成功！')
+        else:
+            logger.error("滚动区域创建失败")
 
     @staticmethod
     def find_child_layout(widget, layout_name):
@@ -186,10 +194,10 @@ class Plugin:
     @staticmethod
     def clear_existing_content(content_layout):
         """清除布局中的旧内容"""
-        for i in range(content_layout.count()):
-            child_widget = content_layout.itemAt(i).widget()
-            if child_widget:
-                child_widget.deleteLater()
+        while content_layout.count() > 0:
+            child = content_layout.takeAt(0).widget()
+            if child:
+                child.deleteLater()  # 确保子组件被正确销毁
 
     @staticmethod
     def is_saturday():
@@ -198,22 +206,26 @@ class Plugin:
 
     def auto_scroll(self):
         """自动滚动功能"""
-        if self.test_widget is None:  # 如果小组件不存在，则不执行
+        if not self.test_widget:  # 检查小组件是否存在
+            logger.warning("自动滚动失败，小组件未初始化或已被销毁")
             return
 
         scroll_area = self.test_widget.findChild(SmoothScrollArea)
-        if scroll_area:
-            vertical_scrollbar = scroll_area.verticalScrollBar()
-            if vertical_scrollbar:
-                max_value = vertical_scrollbar.maximum()
-                # 如果滚动条已经到达底部，滚动回顶部
-                if self.scroll_position >= max_value:
-                    self.scroll_position = 0
-                else:
-                    # 否则继续向下滚动
-                    self.scroll_position += 1
+        if not scroll_area:  # 检查滚动区域是否存在
+            logger.warning("滚动区域未找到或已被销毁")
+            return
 
-                vertical_scrollbar.setValue(self.scroll_position)
+        vertical_scrollbar = scroll_area.verticalScrollBar()
+        if not vertical_scrollbar:  # 检查滚动条是否存在
+            logger.warning("滚动条未找到")
+            return
+
+        max_value = vertical_scrollbar.maximum()
+        if self.scroll_position >= max_value:
+            self.scroll_position = 0  # 滚动回顶部
+        else:
+            self.scroll_position += 1
+        vertical_scrollbar.setValue(self.scroll_position)
 
     def retry_fetch(self):
         """请求失败后重试获取数据"""

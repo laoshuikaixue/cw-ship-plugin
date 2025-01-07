@@ -207,7 +207,7 @@ class Plugin:
     def auto_scroll(self):
         """自动滚动功能"""
         if not self.test_widget:  # 检查小组件是否存在
-            logger.warning("自动滚动失败，小组件未初始化或已被销毁")
+            # logger.warning("自动滚动失败，小组件未初始化或已被销毁") 不能加log不然没启用的话日志就被刷爆了
             return
 
         scroll_area = self.test_widget.findChild(SmoothScrollArea)

@@ -85,21 +85,35 @@ class Plugin:
 
     @staticmethod
     def fetch_ship_dynamics():
-        """请求船班信息接口并获取数据"""
-        try:
-            response = requests.get(API_URL, proxies={'http': None, 'https': None})  # 禁用代理
-            response.raise_for_status()  # 如果状态码不是200，则抛出异常
-            data = response.json().get("data", [])
-            return [item.get("description") for item in data]
-        except requests.RequestException as e:
-            logger.error(f"请求船班信息失败: {e}")
-            return []  # 如果请求失败，返回空列表
+        """请求船班信息接口并获取数据，带重试机制"""
+        retry_count = 0
+        max_retries = 3
+        while retry_count < max_retries:
+            try:
+                response = requests.get(API_URL, headers={}, proxies={'http': None, 'https': None})
+                logger.debug(f"API 请求成功，状态码: {response.status_code}, 返回内容: {response.text}")
+                response.raise_for_status()
+                data = response.json().get("data", {})
+                if data:
+                    return [item.get("description") for item in data]
+                else:
+                    logger.warning("API 返回的数据为空，正在重试...")
+            except requests.RequestException as e:
+                logger.error(f"请求船班信息失败: {e}")
+
+            retry_count += 1
+            time.sleep(2)
+
+        # 如果3次重试都失败，则等待5分钟后再尝试
+        logger.warning(f"重试 {max_retries} 次失败，等待5分钟后再试...")
+        QTimer.singleShot(5 * 60 * 1000, lambda: Plugin.fetch_ship_dynamics())
+        return None
 
     def update_ship_dynamics(self):
         """更新船班信息"""
         if self.should_update_cache():
             # 判断是否需要更新缓存
-            descriptions = self.retry_fetch()
+            descriptions = self.fetch_ship_dynamics()
             if descriptions:
                 self.cached_descriptions = descriptions
                 self.last_fetched = time.time()
@@ -226,17 +240,6 @@ class Plugin:
         else:
             self.scroll_position += 1
         vertical_scrollbar.setValue(self.scroll_position)
-
-    def retry_fetch(self):
-        """请求失败后重试获取数据"""
-        retries = 3
-        for attempt in range(retries):
-            descriptions = self.fetch_ship_dynamics()
-            if descriptions:
-                return descriptions
-            logger.warning(f"获取船班信息失败，正在重试 ({attempt + 1}/{retries})...")
-            time.sleep(1)  # 重试间隔1秒
-        return []
 
     def execute(self):
         # if not self.is_saturday():

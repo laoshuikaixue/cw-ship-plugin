@@ -1,6 +1,6 @@
 import time
 import requests
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QThread
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayout, QScrollBar
 from loguru import logger
 from qfluentwidgets import isDarkTheme
@@ -10,6 +10,35 @@ WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
 API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=4"
 CACHE_DURATION = 1800  # 缓存更新周期：30分钟
+
+
+class ShipFetchThread(QThread):
+    """船班信息获取线程"""
+    fetch_success = pyqtSignal(list)  # 成功信号
+    fetch_failed = pyqtSignal()  # 失败信号
+
+    def __init__(self):
+        super().__init__()
+        self.max_retries = 3
+
+    def run(self):
+        retry_count = 0
+        while retry_count < self.max_retries:
+            try:
+                response = requests.get(API_URL, headers={}, proxies={'http': None, 'https': None})
+                response.raise_for_status()
+                data = response.json().get("data", {})
+                if data:
+                    self.fetch_success.emit([item.get("description") for item in data])
+                    return
+            except Exception as e:
+                logger.error(f"请求失败: {e}")
+
+            retry_count += 1
+            time.sleep(2)
+
+        self.fetch_failed.emit()
+
 
 
 class SmoothScrollBar(QScrollBar):
@@ -58,9 +87,6 @@ class SmoothScrollArea(QScrollArea):
 
 class Plugin:
     def __init__(self, cw_contexts, method):
-        # if not self.is_saturday():
-        #     logger.info("今天不是周六，插件不进行初始化。")
-        #     return
         self.cw_contexts = cw_contexts
         self.method = method
 
@@ -69,74 +95,60 @@ class Plugin:
 
         self.method.register_widget(WIDGET_CODE, WIDGET_NAME, WIDGET_WIDTH)
 
-        # 定时器：每30分钟请求一次船班信息
+        # 初始化定时器
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_ship_dynamics)
-        self.timer.start(CACHE_DURATION * 1000)  # 设置定时器的间隔（毫秒）
+        self.timer.timeout.connect(self.check_update)
+        self.timer.start(1000)  # 每秒检查一次是否需要更新
 
-        # 缓存数据和上次更新时间
-        self.last_fetched = None
-        self.cached_descriptions = []
-
-        # 初始化执行
+        # 滚动相关初始化
         self.scroll_position = 0
         self.scroll_timer = QTimer()
         self.scroll_timer.timeout.connect(self.auto_scroll)
         self.scroll_timer.start(50)  # 每50毫秒执行一次滚动
 
-    @staticmethod
-    def fetch_ship_dynamics():
-        """请求船班信息接口并获取数据，带重试机制"""
-        retry_count = 0
-        max_retries = 3
-        while retry_count < max_retries:
-            try:
-                response = requests.get(API_URL, headers={}, proxies={'http': None, 'https': None})
-                logger.debug(f"API 请求成功，状态码: {response.status_code}, 返回内容: {response.text}")
-                response.raise_for_status()
-                data = response.json().get("data", {})
-                if data:
-                    return [item.get("description") for item in data]
-                else:
-                    logger.warning("API 返回的数据为空，正在重试...")
-            except requests.RequestException as e:
-                logger.error(f"请求船班信息失败: {e}")
+        # 状态变量
+        self.last_fetched = 0
+        self.cached_descriptions = ["正在加载船班信息..."]
+        self.is_loading = False
 
-            retry_count += 1
-            time.sleep(2)
-
-        # 如果3次重试都失败，则等待5分钟后再尝试
-        logger.warning(f"重试 {max_retries} 次失败，等待5分钟后再试...")
-        QTimer.singleShot(5 * 60 * 1000, lambda: Plugin.fetch_ship_dynamics())
-        return None
+    def check_update(self):
+        """定时检查是否需要更新"""
+        if time.time() - self.last_fetched > CACHE_DURATION and not self.is_loading:
+            self.update_ship_dynamics()
 
     def update_ship_dynamics(self):
-        """更新船班信息"""
-        if self.should_update_cache():
-            # 判断是否需要更新缓存
-            descriptions = self.fetch_ship_dynamics()
-            if descriptions:
-                self.cached_descriptions = descriptions
-                self.last_fetched = time.time()
-            else:
-                descriptions = ["无法获取数据，请稍后再试。"]
-        else:
-            # 使用缓存的数据
-            descriptions = self.cached_descriptions
+        """启动异步更新"""
+        self.is_loading = True
+        self.cached_descriptions = ["正在加载船班信息..."]
+        self._update_ui()
 
-        # 更新小组件内容
-        self.update_widget_content(descriptions)
+        self.worker_thread = ShipFetchThread()
+        self.worker_thread.fetch_success.connect(self.handle_success)
+        self.worker_thread.fetch_failed.connect(self.handle_failure)
+        self.worker_thread.start()
 
-    def should_update_cache(self):
-        """检查是否需要更新缓存"""
-        return not self.cached_descriptions or \
-            not self.last_fetched or \
-            (self.last_fetched + CACHE_DURATION) < time.time()
+    def handle_success(self, descriptions):
+        """处理成功响应"""
+        self.is_loading = False
+        self.last_fetched = time.time()
+        self.cached_descriptions = descriptions or ["暂无船班信息"]
+        self._update_ui()
+
+    def handle_failure(self):
+        """处理失败情况"""
+        self.is_loading = False
+        self.cached_descriptions = ["数据获取失败，5分钟后重试"]
+        self._update_ui()
+        QTimer.singleShot(300000, self.update_ship_dynamics)  # 5分钟后重试
+
+    def _update_ui(self):
+        """线程安全更新界面"""
+        QTimer.singleShot(0, lambda: self.update_widget_content(self.cached_descriptions))
 
     def update_widget_content(self, descriptions):
         """更新小组件内容"""
         self.test_widget = self.method.get_widget(WIDGET_CODE)
-        if not self.test_widget:  # 如果test_widget为空
+        if not self.test_widget:
             logger.error(f"小组件未找到，WIDGET_CODE: {WIDGET_CODE}")
             return
 
@@ -214,10 +226,6 @@ class Plugin:
             if child:
                 child.deleteLater()  # 确保子组件被正确销毁
 
-    @staticmethod
-    def is_saturday():
-        """判断今天是否是周六"""
-        return time.localtime().tm_wday == 5
 
     def auto_scroll(self):
         """自动滚动功能"""
@@ -243,8 +251,5 @@ class Plugin:
         vertical_scrollbar.setValue(self.scroll_position)
 
     def execute(self):
-        # if not self.is_saturday():
-        #     logger.info("今天不是周六，插件不进行初始化。")
-        #     return
-        """首次执行，加载船班信息"""
+        """首次执行"""
         self.update_ship_dynamics()

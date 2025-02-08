@@ -234,13 +234,13 @@ class Plugin:
             return
 
         scroll_area = self.test_widget.findChild(SmoothScrollArea)
-        if not scroll_area:  # 检查滚动区域是否存在
-            logger.warning("滚动区域未找到或已被销毁")
+        if not scroll_area:
+            # logger.warning("无法找到 SmoothScrollArea，停止自动滚动") 实际使用不加log不然有错日志就被刷爆了
             return
 
         vertical_scrollbar = scroll_area.verticalScrollBar()
-        if not vertical_scrollbar:  # 检查滚动条是否存在
-            logger.warning("滚动条未找到")
+        if not vertical_scrollbar:
+            # logger.warning("无法找到垂直滚动条，停止自动滚动") 实际使用不加log不然有错日志就被刷爆了
             return
 
         max_value = vertical_scrollbar.maximum()

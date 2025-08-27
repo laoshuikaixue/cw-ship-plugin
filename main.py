@@ -1,5 +1,6 @@
 import time
 import requests
+from datetime import datetime, date
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QThread
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget, QVBoxLayout, QScrollBar
 from loguru import logger
@@ -8,7 +9,7 @@ from qfluentwidgets import isDarkTheme
 WIDGET_CODE = 'widget_ship.ui'
 WIDGET_NAME = '船班信息 | LaoShui'
 WIDGET_WIDTH = 360
-API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=4"
+API_URL = "https://zyb.ziubao.com/api/v1/getShipDynamics?area=%E5%85%AD%E6%A8%AA%E5%B2%9B&pageSize=20"
 CACHE_DURATION = 1800  # 缓存更新周期：30分钟
 
 
@@ -27,9 +28,47 @@ class ShipFetchThread(QThread):
             try:
                 response = requests.get(API_URL, headers={}, proxies={'http': None, 'https': None})
                 response.raise_for_status()
-                data = response.json().get("data", {})
+                data = response.json().get("data", [])
                 if data:
-                    self.fetch_success.emit([item.get("description") for item in data])
+                    # 获取当天日期
+                    today = date.today()
+
+                    # 多重过滤条件
+                    filtered_data = []
+                    for item in data:
+                        # 条件1: confrom 字段为"六横大岙客运中心"
+                        if item.get("confrom") != "六横大岙客运中心":
+                            continue
+
+                        # 条件2: description 包含"沈家门"或"长峙"
+                        description = item.get('description', '')
+                        if not ('沈家门' in description or '长峙' in description):
+                            continue
+
+                        # 条件3: 只显示当天的消息
+                        try:
+                            item_datetime = item.get('datetime', '')
+                            if item_datetime:
+                                # 解析日期时间字符串，假设格式为 "YYYY-MM-DD HH:MM:SS" 或类似格式
+                                item_date = datetime.strptime(item_datetime.split()[0], '%Y-%m-%d').date()
+                                if item_date != today:
+                                    continue
+                        except (ValueError, IndexError):
+                            # 如果日期解析失败，跳过该条目
+                            continue
+
+                        filtered_data.append(item)
+
+                    # 传递完整的船班信息
+                    ship_info_list = []
+                    for item in filtered_data:
+                        ship_info = {
+                            'datetime': item.get('datetime', ''),
+                            'description': item.get('description', ''),
+                            'fbz': item.get('fbz', '')
+                        }
+                        ship_info_list.append(ship_info)
+                    self.fetch_success.emit(ship_info_list)
                     return
             except Exception as e:
                 logger.error(f"请求失败: {e}")
@@ -38,7 +77,6 @@ class ShipFetchThread(QThread):
             time.sleep(2)
 
         self.fetch_failed.emit()
-
 
 
 class SmoothScrollBar(QScrollBar):
@@ -108,8 +146,9 @@ class Plugin:
 
         # 状态变量
         self.last_fetched = 0
-        self.cached_descriptions = ["正在加载船班信息..."]
+        self.cached_descriptions = [{"description": "正在加载船班信息..."}]
         self.is_loading = False
+        self.test_widget = None  # 初始化 test_widget 属性
 
     def check_update(self):
         """定时检查是否需要更新"""
@@ -119,7 +158,7 @@ class Plugin:
     def update_ship_dynamics(self):
         """启动异步更新"""
         self.is_loading = True
-        self.cached_descriptions = ["正在加载船班信息..."]
+        self.cached_descriptions = [{"description": "正在加载船班信息..."}]
         self._update_ui()
 
         self.worker_thread = ShipFetchThread()
@@ -127,17 +166,17 @@ class Plugin:
         self.worker_thread.fetch_failed.connect(self.handle_failure)
         self.worker_thread.start()
 
-    def handle_success(self, descriptions):
+    def handle_success(self, ship_info_list):
         """处理成功响应"""
         self.is_loading = False
         self.last_fetched = time.time()
-        self.cached_descriptions = descriptions or ["暂无船班信息"]
+        self.cached_descriptions = ship_info_list or [{"description": "暂无六横大岙客运中心船班信息"}]
         self._update_ui()
 
     def handle_failure(self):
         """处理失败情况"""
         self.is_loading = False
-        self.cached_descriptions = ["数据获取失败，5分钟后重试"]
+        self.cached_descriptions = [{"description": "数据获取失败，5分钟后重试"}]
         self._update_ui()
         QTimer.singleShot(300000, self.update_ship_dynamics)  # 5分钟后重试
 
@@ -145,7 +184,7 @@ class Plugin:
         """线程安全更新界面"""
         QTimer.singleShot(0, lambda: self.update_widget_content(self.cached_descriptions))
 
-    def update_widget_content(self, descriptions):
+    def update_widget_content(self, ship_info_list):
         """更新小组件内容"""
         self.test_widget = self.method.get_widget(WIDGET_CODE)
         if not self.test_widget:
@@ -164,10 +203,10 @@ class Plugin:
         self.clear_existing_content(content_layout)
 
         # 创建滚动区域并设置内容
-        scroll_area = self.create_scroll_area(descriptions)
+        scroll_area = self.create_scroll_area(ship_info_list)
         if scroll_area:
             content_layout.addWidget(scroll_area)
-            logger.success('船班信息更新成功！')
+            logger.success('六横大岙客运中心船班信息更新成功！')
         else:
             logger.error("滚动区域创建失败")
 
@@ -176,47 +215,80 @@ class Plugin:
         """根据名称查找并返回布局"""
         return widget.findChild(QHBoxLayout, layout_name)
 
-    def create_scroll_area(self, descriptions):
-        """创建并返回一个包含船班描述信息的滚动区域"""
+    def create_scroll_area(self, ship_info_list):
+        """创建并返回一个包含船班信息的滚动区域"""
         scroll_area = SmoothScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet("QScrollBar:vertical { width: 0px; }")  # 隐藏滚动条
 
         scroll_content = QWidget()
         scroll_content_layout = QVBoxLayout()
+        scroll_content_layout.setSpacing(8)  # 增加间距
         scroll_content.setLayout(scroll_content_layout)
 
-        for description in descriptions:
-            description_label = self.create_description_label(description)
-            scroll_content_layout.addWidget(description_label)
-
-            # 添加分割线
-            line = QLabel()
-            line.setFixedHeight(1)
-            line.setStyleSheet("background-color: #E0E0E0;" if not isDarkTheme() else "background-color: #3A3A3A;")
-            scroll_content_layout.addWidget(line)
+        for ship_info in ship_info_list:
+            ship_widget = self.create_ship_info_widget(ship_info)
+            scroll_content_layout.addWidget(ship_widget)
 
         scroll_area.setWidget(scroll_content)
         return scroll_area
 
     @staticmethod
-    def create_description_label(description):
-        """创建一个描述标签并返回"""
-        description_label = QLabel(description)
-        description_label.setAlignment(Qt.AlignLeft)
-        description_label.setWordWrap(True)  # 自动换行
+    def create_ship_info_widget(ship_info):
+        """创建一个船班信息小部件并返回"""
+        container = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
 
-        # 根据主题设置样式
-        if isDarkTheme():
-            description_label.setStyleSheet(
-                "font-size: 14px; color: #FAF9F6; font-weight: bold;"
-            )
+        # 设置容器样式 - 透明背景，只保留左侧蓝色条
+        container.setStyleSheet(
+            "QWidget { "
+            "background-color: transparent; "
+            "border-left: 4px solid #2196F3; "
+            "}"
+        )
+
+        # 如果只有描述信息（加载状态或错误状态）
+        if isinstance(ship_info, dict) and len(ship_info) == 1 and 'description' in ship_info:
+            description_label = QLabel(ship_info['description'])
+            description_label.setAlignment(Qt.AlignLeft)
+            description_label.setWordWrap(True)
+            if isDarkTheme():
+                description_label.setStyleSheet(
+                    "font-size: 16px; color: #FAF9F6; font-weight: bold; border: none; background: transparent;")
+            else:
+                description_label.setStyleSheet(
+                    "font-size: 16px; color: #2E2E2E; font-weight: bold; border: none; background: transparent;")
+            layout.addWidget(description_label)
         else:
-            description_label.setStyleSheet(
-                "font-size: 14px; color: #2E2E2E; font-weight: bold;"
-            )
+            # 时间信息
+            if ship_info.get('datetime'):
+                time_label = QLabel(f"📅 {ship_info['datetime']}")
+                time_label.setAlignment(Qt.AlignLeft)
+                if isDarkTheme():
+                    time_label.setStyleSheet(
+                        "font-size: 14px; color: #B0B0B0; font-weight: normal; border: none; background: transparent;")
+                else:
+                    time_label.setStyleSheet(
+                        "font-size: 14px; color: #666666; font-weight: normal; border: none; background: transparent;")
+                layout.addWidget(time_label)
 
-        return description_label
+            # 描述信息
+            if ship_info.get('description'):
+                description_label = QLabel(ship_info['description'])
+                description_label.setAlignment(Qt.AlignLeft)
+                description_label.setWordWrap(True)
+                if isDarkTheme():
+                    description_label.setStyleSheet(
+                        "font-size: 16px; color: #FAF9F6; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
+                else:
+                    description_label.setStyleSheet(
+                        "font-size: 16px; color: #2E2E2E; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
+                layout.addWidget(description_label)
+
+        container.setLayout(layout)
+        return container
 
     @staticmethod
     def clear_existing_content(content_layout):
@@ -225,7 +297,6 @@ class Plugin:
             child = content_layout.takeAt(0).widget()
             if child:
                 child.deleteLater()  # 确保子组件被正确销毁
-
 
     def auto_scroll(self):
         """自动滚动功能"""

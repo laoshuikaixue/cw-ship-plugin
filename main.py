@@ -40,9 +40,9 @@ class ShipFetchThread(QThread):
                         if item.get("confrom") != "六横大岙客运中心":
                             continue
 
-                        # 条件2: description 包含"沈家门"或"长峙"
+                        # 条件2: description 包含"沈家门"或"长峙"或”正常“
                         description = item.get('description', '')
-                        if not ('沈家门' in description or '长峙' in description):
+                        if not ('沈家门' in description or '长峙' in description or '正常' in description):
                             continue
 
                         # 条件3: 只显示当天的消息
@@ -77,6 +77,7 @@ class ShipFetchThread(QThread):
             time.sleep(2)
 
         self.fetch_failed.emit()
+
 
 
 class SmoothScrollBar(QScrollBar):
@@ -255,11 +256,9 @@ class Plugin:
             description_label.setAlignment(Qt.AlignLeft)
             description_label.setWordWrap(True)
             if isDarkTheme():
-                description_label.setStyleSheet(
-                    "font-size: 16px; color: #FAF9F6; font-weight: bold; border: none; background: transparent;")
+                description_label.setStyleSheet("font-size: 16px; color: #FAF9F6; font-weight: bold; border: none; background: transparent;")
             else:
-                description_label.setStyleSheet(
-                    "font-size: 16px; color: #2E2E2E; font-weight: bold; border: none; background: transparent;")
+                description_label.setStyleSheet("font-size: 16px; color: #2E2E2E; font-weight: bold; border: none; background: transparent;")
             layout.addWidget(description_label)
         else:
             # 时间信息
@@ -267,11 +266,9 @@ class Plugin:
                 time_label = QLabel(f"📅 {ship_info['datetime']}")
                 time_label.setAlignment(Qt.AlignLeft)
                 if isDarkTheme():
-                    time_label.setStyleSheet(
-                        "font-size: 14px; color: #B0B0B0; font-weight: normal; border: none; background: transparent;")
+                    time_label.setStyleSheet("font-size: 14px; color: #B0B0B0; font-weight: normal; border: none; background: transparent;")
                 else:
-                    time_label.setStyleSheet(
-                        "font-size: 14px; color: #666666; font-weight: normal; border: none; background: transparent;")
+                    time_label.setStyleSheet("font-size: 14px; color: #666666; font-weight: normal; border: none; background: transparent;")
                 layout.addWidget(time_label)
 
             # 描述信息
@@ -280,11 +277,9 @@ class Plugin:
                 description_label.setAlignment(Qt.AlignLeft)
                 description_label.setWordWrap(True)
                 if isDarkTheme():
-                    description_label.setStyleSheet(
-                        "font-size: 16px; color: #FAF9F6; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
+                    description_label.setStyleSheet("font-size: 16px; color: #FAF9F6; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
                 else:
-                    description_label.setStyleSheet(
-                        "font-size: 16px; color: #2E2E2E; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
+                    description_label.setStyleSheet("font-size: 16px; color: #2E2E2E; font-weight: bold; margin: 6px 0px; border: none; background: transparent;")
                 layout.addWidget(description_label)
 
         container.setLayout(layout)
@@ -297,6 +292,7 @@ class Plugin:
             child = content_layout.takeAt(0).widget()
             if child:
                 child.deleteLater()  # 确保子组件被正确销毁
+
 
     def auto_scroll(self):
         """自动滚动功能"""
